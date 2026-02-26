@@ -1,0 +1,25 @@
+{
+  "name": "tte-gateway",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jejernig/tte-gateway.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jejernig/tte-gateway/issues"
+  },
+  "homepage": "https://github.com/jejernig/tte-gateway#readme",
+  "dependencies": {
+    "fastify": "^5.7.4"
+  }
+}
