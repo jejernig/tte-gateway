@@ -53,6 +53,24 @@ function parseJsonCandidate(value) {
   }
 }
 
+function normalizeClassificationOutput(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const normalized = { ...raw };
+  if (typeof normalized.confidence === 'number' && normalized.confidence >= 0 && normalized.confidence <= 1) {
+    normalized.confidence = Math.round(normalized.confidence * 100);
+  } else if (typeof normalized.confidence === 'string') {
+    const parsed = Number.parseFloat(normalized.confidence);
+    if (!Number.isNaN(parsed)) {
+      normalized.confidence = parsed <= 1 ? Math.round(parsed * 100) : Math.round(parsed);
+    }
+  }
+  if (normalized.subcategory === '') normalized.subcategory = null;
+  if (Array.isArray(normalized.tags)) {
+    normalized.tags = normalized.tags.map((tag) => String(tag).trim()).filter(Boolean);
+  }
+  return normalized;
+}
+
 function heuristicClassification(input, schema) {
   const docTypes = (schema && Array.isArray(schema.doc_type) && schema.doc_type.length)
     ? schema.doc_type
@@ -138,7 +156,8 @@ fastify.post('/api/v1/llm/classify', async (request, reply) => {
       const fallback = heuristicClassification(input, schema);
       return reply.code(200).send({ classification: fallback, reason: 'invalid_json' });
     }
-    return reply.code(200).send({ classification: parsed });
+    const normalized = normalizeClassificationOutput(parsed) || parsed;
+    return reply.code(200).send({ classification: normalized });
   } catch (err) {
     const fallback = heuristicClassification(input, schema);
     return reply.code(200).send({ classification: fallback, reason: 'ollama_unavailable' });
