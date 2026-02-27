@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/jejernig/tte-gateway#readme",
   "dependencies": {
+    "ajv": "^8.18.0",
     "fastify": "^5.7.4"
   }
 }

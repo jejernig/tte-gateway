@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["version", "lanes", "models", "division_assignments", "routing_rules", "fallback"],
+  "properties": {
+    "version": { "type": "integer" },
+    "lanes": {
+      "type": "object",
+      "required": ["primary", "specialist"],
+      "properties": {
+        "primary": { "type": "object", "required": ["concurrency"], "properties": { "concurrency": { "type": "integer", "minimum": 1 } } },
+        "specialist": { "type": "object", "required": ["concurrency"], "properties": { "concurrency": { "type": "integer", "minimum": 1 } } }
+      }
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["model_id", "lane_type", "context_limit", "status", "division_owner", "intended_capabilities", "version"],
+        "properties": {
+          "model_id": { "type": "string" },
+          "lane_type": { "type": "string", "enum": ["primary", "specialist"] },
+          "context_limit": { "type": "integer" },
+          "status": { "type": "string", "enum": ["active", "inactive"] },
+          "division_owner": { "type": "string" },
+          "intended_capabilities": { "type": "array", "items": { "type": "string" } },
+          "version": { "type": "string" },
+          "embedding_dimension": { "type": ["integer", "null"] }
+        }
+      }
+    },
+    "division_assignments": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["primary"],
+        "properties": {
+          "primary": { "type": "string" },
+          "specialist": { "type": ["string", "null"] },
+          "specialist_tasks": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "routing_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["model_id"],
+        "properties": {
+          "division": { "type": ["string", "null"] },
+          "capability": { "type": ["string", "null"] },
+          "task_type": { "type": ["string", "null"] },
+          "risk_tier": { "type": ["string", "null"] },
+          "model_id": { "type": "string" },
+          "lane_type": { "type": ["string", "null"], "enum": ["primary", "specialist", null] }
+        }
+      }
+    },
+    "fallback": {
+      "type": "object",
+      "required": ["default_model", "default_lane"],
+      "properties": {
+        "default_model": { "type": "string" },
+        "default_lane": { "type": "string", "enum": ["primary", "specialist"] }
+      }
+    }
+  }
+}

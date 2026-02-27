@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "lanes": {
+    "primary": { "concurrency": 10 },
+    "specialist": { "concurrency": 3 }
+  },
+  "models": [
+    { "model_id": "qwen2.5:3b-16k", "lane_type": "primary", "context_limit": 16384, "status": "active", "division_owner": "ai", "intended_capabilities": ["general", "routing"], "version": "1" },
+    { "model_id": "qwen2.5:7b-16k", "lane_type": "specialist", "context_limit": 16384, "status": "active", "division_owner": "ai", "intended_capabilities": ["reasoning"], "version": "1" },
+    { "model_id": "qwen2.5-coder:7b-8k", "lane_type": "specialist", "context_limit": 8192, "status": "active", "division_owner": "engineering", "intended_capabilities": ["code"], "version": "1" },
+    { "model_id": "deepseek-coder:6.7b", "lane_type": "specialist", "context_limit": 8192, "status": "active", "division_owner": "engineering", "intended_capabilities": ["code"], "version": "1" },
+    { "model_id": "phi3:mini", "lane_type": "primary", "context_limit": 8192, "status": "active", "division_owner": "security", "intended_capabilities": ["classification"], "version": "1" },
+    { "model_id": "nomic-embed-text", "lane_type": "specialist", "context_limit": 8192, "status": "active", "division_owner": "archives", "intended_capabilities": ["embedding"], "version": "1", "embedding_dimension": 384 }
+  ],
+  "division_assignments": {
+    "control-plane": { "primary": "qwen2.5:3b-16k", "specialist": null, "specialist_tasks": [] },
+    "core": { "primary": "qwen2.5:3b-16k", "specialist": null, "specialist_tasks": [] },
+    "data": { "primary": "qwen2.5:3b-16k", "specialist": "qwen2.5-coder:7b-8k", "specialist_tasks": ["schema", "sql", "migration"] },
+    "ai": { "primary": "qwen2.5:3b-16k", "specialist": "qwen2.5:7b-16k", "specialist_tasks": ["evaluation", "heuristics"] },
+    "archives": { "primary": "qwen2.5:3b-16k", "specialist": "nomic-embed-text", "specialist_tasks": ["embedding"] },
+    "communications": { "primary": "qwen2.5:3b-16k", "specialist": null, "specialist_tasks": [] },
+    "operations": { "primary": "qwen2.5:3b-16k", "specialist": null, "specialist_tasks": [] },
+    "security": { "primary": "phi3:mini", "specialist": "qwen2.5:3b-16k", "specialist_tasks": ["deep_reasoning"] },
+    "compliance": { "primary": "phi3:mini", "specialist": "qwen2.5:3b-16k", "specialist_tasks": ["policy"] },
+    "hr": { "primary": "qwen2.5:3b-16k", "specialist": null, "specialist_tasks": [] },
+    "engineering": { "primary": "qwen2.5-coder:7b-8k", "specialist": "deepseek-coder:6.7b", "specialist_tasks": ["code", "refactor", "patch"] },
+    "product": { "primary": "qwen2.5:7b-16k", "specialist": "qwen2.5:3b-16k", "specialist_tasks": ["longform"] },
+    "finance": { "primary": "qwen2.5:3b-16k", "specialist": null, "specialist_tasks": [] },
+    "marketing": { "primary": "qwen2.5:3b-16k", "specialist": "qwen2.5:7b-16k", "specialist_tasks": ["campaign"] },
+    "research": { "primary": "qwen2.5:7b-16k", "specialist": "qwen2.5:3b-16k", "specialist_tasks": ["synthesis"] },
+    "analytics-bi": { "primary": "qwen2.5:3b-16k", "specialist": null, "specialist_tasks": [] },
+    "customer-success": { "primary": "qwen2.5:3b-16k", "specialist": null, "specialist_tasks": [] },
+    "custodial": { "primary": "qwen2.5-coder:7b-8k", "specialist": "qwen2.5:3b-16k", "specialist_tasks": ["lint", "policy"] }
+  },
+  "routing_rules": [
+    { "division": "control-plane", "capability": "rbac", "task_type": "logic", "risk_tier": "T3", "model_id": "qwen2.5:3b-16k", "lane_type": "primary" },
+    { "division": "data", "capability": "sql", "task_type": "migration", "risk_tier": null, "model_id": "qwen2.5-coder:7b-8k", "lane_type": "specialist" },
+    { "division": "security", "capability": "redaction", "task_type": "classification", "risk_tier": null, "model_id": "phi3:mini", "lane_type": "primary" },
+    { "division": "engineering", "capability": "code", "task_type": "refactor", "risk_tier": null, "model_id": "qwen2.5-coder:7b-8k", "lane_type": "specialist" }
+  ],
+  "fallback": { "default_model": "qwen2.5:3b-16k", "default_lane": "primary" }
+}

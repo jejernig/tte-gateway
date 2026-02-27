@@ -10,10 +10,23 @@ const version = process.env.APP_VERSION || pkg.version || 'unknown';
 const classificationModel = process.env.CLASSIFICATION_MODEL || 'qwen2.5:3b-16k';
 const ollamaUrl = (process.env.OLLAMA_URL || 'http://localhost:11434').replace(/\/$/, '');
 const requestTimeoutMs = Number.parseInt(process.env.LLM_REQUEST_TIMEOUT_MS || '15000', 10);
+const registryPath = process.env.MODEL_REGISTRY_PATH || './config/model-registry.json';
+const registrySchemaPath = process.env.MODEL_REGISTRY_SCHEMA_PATH || './config/model-registry.schema.json';
+
+const { loadRegistry, resolveModelForRequest, findModel } = require('./lib/model-registry');
+const { LaneLimiter } = require('./lib/lane-limiter');
 
 fastify.get('/healthz', async () => ({ status: 'ok' }));
 fastify.get('/readyz', async () => ({ status: 'ready' }));
 fastify.get('/version', async () => ({ version, gitSha }));
+
+let modelRegistry = loadRegistry(registryPath, registrySchemaPath);
+let laneLimiter = new LaneLimiter({
+  primary: modelRegistry.lanes.primary.concurrency,
+  specialist: modelRegistry.lanes.specialist.concurrency
+});
+
+fastify.get('/api/v1/llm/registry', async () => ({ status: 'ok', registry: modelRegistry }));
 
 function buildSchema(schema) {
   const docType = Array.isArray(schema && schema.doc_type) && schema.doc_type.length
@@ -161,6 +174,85 @@ fastify.post('/api/v1/llm/classify', async (request, reply) => {
   } catch (err) {
     const fallback = heuristicClassification(input, schema);
     return reply.code(200).send({ classification: fallback, reason: 'ollama_unavailable' });
+  } finally {
+    clearTimeout(timeout);
+  }
+});
+
+fastify.post('/api/v1/llm/invoke', async (request, reply) => {
+  const startedAt = Date.now();
+  const {
+    prompt,
+    options,
+    division,
+    capability,
+    task_type,
+    risk_tier,
+    correlationId,
+    stream
+  } = request.body || {};
+
+  if (!division) {
+    return reply.code(400).send({ error: 'division_required' });
+  }
+  if (!prompt || typeof prompt !== 'string') {
+    return reply.code(400).send({ error: 'prompt_required' });
+  }
+
+  const routing = resolveModelForRequest(modelRegistry, { division, capability, task_type, risk_tier });
+  const model = findModel(modelRegistry, routing.model_id);
+  if (!model || model.status !== 'active') {
+    fastify.log.warn({ event: 'evt.ai.model.rejected.v1', model_id: routing.model_id, division, correlationId });
+    return reply.code(400).send({ error: 'model_unavailable', model_id: routing.model_id });
+  }
+
+  const lane = routing.lane || model.lane_type;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+
+  try {
+    const response = await laneLimiter.run(lane, () => fetch(`${ollamaUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: routing.model_id,
+        prompt,
+        stream: Boolean(stream),
+        options: options || {}
+      })
+    }));
+
+    if (!response.ok) {
+      const body = await response.text();
+      fastify.log.error({ event: 'evt.ai.model.invoke.failed.v1', status: response.status, body, model_id: routing.model_id });
+      return reply.code(502).send({ error: 'ollama_error', status: response.status });
+    }
+
+    const data = await response.json();
+    const latency = Date.now() - startedAt;
+    fastify.log.info({
+      event: 'evt.ai.model.invoked.v1',
+      model_id: routing.model_id,
+      division,
+      capability: capability || null,
+      task_type: task_type || null,
+      risk_tier: risk_tier || null,
+      lane,
+      correlationId: correlationId || null,
+      latency_ms: latency
+    });
+    return reply.code(200).send({
+      status: 'ok',
+      model_id: routing.model_id,
+      lane,
+      source: routing.source,
+      response: data.response,
+      latency_ms: latency
+    });
+  } catch (err) {
+    fastify.log.error({ event: 'evt.ai.model.invoke.exception.v1', error: err.message, model_id: routing.model_id });
+    return reply.code(502).send({ error: 'ollama_unavailable' });
   } finally {
     clearTimeout(timeout);
   }
