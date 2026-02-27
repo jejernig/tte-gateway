@@ -6,6 +6,8 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY server.js ./
+COPY lib ./lib
+COPY config ./config
 
 ARG GIT_SHA=unknown
 ARG APP_VERSION=unknown
