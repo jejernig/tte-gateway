@@ -10,7 +10,7 @@
     { "model_id": "qwen2.5-coder:7b-8k", "lane_type": "specialist", "context_limit": 8192, "status": "active", "division_owner": "engineering", "intended_capabilities": ["code"], "version": "1" },
     { "model_id": "deepseek-coder:6.7b", "lane_type": "specialist", "context_limit": 8192, "status": "active", "division_owner": "engineering", "intended_capabilities": ["code"], "version": "1" },
     { "model_id": "phi3:mini", "lane_type": "primary", "context_limit": 8192, "status": "active", "division_owner": "security", "intended_capabilities": ["classification"], "version": "1" },
-    { "model_id": "nomic-embed-text", "lane_type": "specialist", "context_limit": 8192, "status": "active", "division_owner": "archives", "intended_capabilities": ["embedding"], "version": "1", "embedding_dimension": 384 }
+    { "model_id": "nomic-embed-text", "lane_type": "specialist", "context_limit": 2048, "status": "active", "division_owner": "archives", "intended_capabilities": ["embedding"], "version": "1", "embedding_dimension": 384 }
   ],
   "division_assignments": {
     "control-plane": { "primary": "qwen2.5:3b-16k", "specialist": null, "specialist_tasks": [] },
