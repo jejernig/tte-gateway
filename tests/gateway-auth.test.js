@@ -87,6 +87,23 @@ test('hybrid mode accepts legacy token and jwt token', () => {
   assert.equal(validateGatewayToken(validJwt.token, authConfig).ok, true);
 });
 
+test('hybrid mode without legacy token enforces jwt', () => {
+  const authConfig = {
+    mode: 'hybrid',
+    secret: 'jwt-secret',
+    audienceList: ['gateway'],
+    requireJwtClaims: false,
+    clockSkewMs: 120000
+  };
+  const validJwt = createSignedJwt({
+    aud: 'gateway',
+    exp: nowSecondsPlus(600)
+  }, { secret: 'jwt-secret' });
+
+  assert.equal(validateGatewayToken(validJwt.token, authConfig).ok, true);
+  assert.equal(validateGatewayToken('legacy-secret', authConfig).reason, 'expected_jwt_token');
+});
+
 test('jwt mode rejects missing or legacy token', () => {
   const authConfig = {
     mode: 'jwt',
