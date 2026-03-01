@@ -1,6 +1,7 @@
 'use strict';
 
 const fastify = require('fastify')({ logger: true });
+const crypto = require('crypto');
 const pkg = require('./package.json');
 
 const port = Number.parseInt(process.env.PORT || '3000', 10);
@@ -8,13 +9,47 @@ const host = process.env.HOST || '0.0.0.0';
 const gitSha = process.env.GIT_SHA || process.env.COMMIT_SHA || 'unknown';
 const version = process.env.APP_VERSION || pkg.version || 'unknown';
 const classificationModel = process.env.CLASSIFICATION_MODEL || 'qwen2.5:3b-16k';
-const ollamaUrl = (process.env.OLLAMA_URL || 'http://localhost:11434').replace(/\/$/, '');
+const ollamaUrl = (process.env.OLLAMA_URL || '').replace(/\/$/, '');
 const requestTimeoutMs = Number.parseInt(process.env.LLM_REQUEST_TIMEOUT_MS || '15000', 10);
 const registryPath = process.env.MODEL_REGISTRY_PATH || './config/model-registry.json';
 const registrySchemaPath = process.env.MODEL_REGISTRY_SCHEMA_PATH || './config/model-registry.schema.json';
+const gatewayApiToken = process.env.GATEWAY_API_TOKEN || process.env.SERVICE_TOKEN || '';
+const gatewayAuthBypass = process.env.GATEWAY_AUTH_BYPASS === 'true' || process.env.NODE_ENV === 'test';
 
 const { loadRegistry, resolveModelForRequest, findModel } = require('./lib/model-registry');
 const { LaneLimiter } = require('./lib/lane-limiter');
+
+function secureEqual(left, right) {
+  if (!left || !right || left.length !== right.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(left), Buffer.from(right));
+  } catch {
+    return false;
+  }
+}
+
+function resolveToken(request) {
+  const headerToken = request.headers['x-gateway-token'] || request.headers['x-service-token'];
+  const authHeader = request.headers.authorization || '';
+  const bearer = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
+  return headerToken || bearer || '';
+}
+
+function requireGatewayAuth(request, reply) {
+  if (gatewayAuthBypass) return true;
+  if (!gatewayApiToken) {
+    fastify.log.warn({ event: 'evt.gateway.auth.missing_token', path: request.url });
+    reply.code(503).send({ error: 'service_token_not_configured' });
+    return false;
+  }
+  const candidate = resolveToken(request);
+  if (!secureEqual(candidate, gatewayApiToken)) {
+    fastify.log.warn({ event: 'evt.gateway.auth.denied', path: request.url });
+    reply.code(401).send({ error: 'unauthorized' });
+    return false;
+  }
+  return true;
+}
 
 fastify.get('/healthz', async () => ({ status: 'ok' }));
 fastify.get('/readyz', async () => ({ status: 'ready' }));
@@ -129,7 +164,7 @@ function heuristicClassification(input, schema) {
   };
 }
 
-fastify.post('/api/v1/llm/classify', async (request, reply) => {
+fastify.post('/api/v1/llm/classify', { preHandler: requireGatewayAuth }, async (request, reply) => {
   const { input, schema } = request.body || {};
   if (!input || typeof input !== 'object') {
     return reply.code(400).send({ error: 'input is required' });
@@ -179,7 +214,7 @@ fastify.post('/api/v1/llm/classify', async (request, reply) => {
   }
 });
 
-fastify.post('/api/v1/llm/invoke', async (request, reply) => {
+fastify.post('/api/v1/llm/invoke', { preHandler: requireGatewayAuth }, async (request, reply) => {
   const startedAt = Date.now();
   const {
     prompt,
