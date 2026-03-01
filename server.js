@@ -1,8 +1,8 @@
 'use strict';
 
 const fastify = require('fastify')({ logger: true });
-const crypto = require('crypto');
 const pkg = require('./package.json');
+const gatewayAuth = require('./lib/gateway-auth');
 
 const port = Number.parseInt(process.env.PORT || '3000', 10);
 const host = process.env.HOST || '0.0.0.0';
@@ -15,18 +15,15 @@ const registryPath = process.env.MODEL_REGISTRY_PATH || './config/model-registry
 const registrySchemaPath = process.env.MODEL_REGISTRY_SCHEMA_PATH || './config/model-registry.schema.json';
 const gatewayApiToken = process.env.GATEWAY_API_TOKEN || process.env.SERVICE_TOKEN || '';
 const gatewayAuthBypass = process.env.GATEWAY_AUTH_BYPASS === 'true' || process.env.NODE_ENV === 'test';
+const authConfig = {
+  ...gatewayAuth.buildAuthConfig(),
+  legacyToken: gatewayApiToken
+};
+const { validateGatewayToken } = gatewayAuth;
+const authConfigValidation = gatewayAuth.validateAuthConfig(authConfig);
 
 const { loadRegistry, resolveModelForRequest, findModel } = require('./lib/model-registry');
 const { LaneLimiter } = require('./lib/lane-limiter');
-
-function secureEqual(left, right) {
-  if (!left || !right || left.length !== right.length) return false;
-  try {
-    return crypto.timingSafeEqual(Buffer.from(left), Buffer.from(right));
-  } catch {
-    return false;
-  }
-}
 
 function resolveToken(request) {
   const headerToken = request.headers['x-gateway-token'] || request.headers['x-service-token'];
@@ -35,17 +32,50 @@ function resolveToken(request) {
   return headerToken || bearer || '';
 }
 
+function authFailureReason(reason) {
+  switch (reason) {
+    case 'auth_not_configured':
+      return 'gateway_auth_not_configured';
+    case 'expected_jwt_token':
+      return 'gateway_auth_expected_jwt';
+    case 'jwt_not_configured':
+      return 'gateway_auth_jwt_not_configured';
+    case 'legacy_not_configured':
+      return 'gateway_auth_legacy_not_configured';
+    case 'invalid_jwt':
+      return 'gateway_auth_invalid_jwt';
+    case 'invalid_jwt_signature':
+      return 'gateway_auth_invalid_jwt_signature';
+    case 'token_expired':
+      return 'gateway_auth_token_expired';
+    case 'invalid_issuer':
+      return 'gateway_auth_invalid_issuer';
+    case 'invalid_audience':
+      return 'gateway_auth_invalid_audience';
+    case 'token_not_active':
+      return 'gateway_auth_token_not_active';
+    default:
+      return reason === 'invalid_service_token' ? 'gateway_auth_invalid_token' : 'gateway_auth_unauthorized';
+  }
+}
+
 function requireGatewayAuth(request, reply) {
   if (gatewayAuthBypass) return true;
-  if (!gatewayApiToken) {
-    fastify.log.warn({ event: 'evt.gateway.auth.missing_token', path: request.url });
-    reply.code(503).send({ error: 'service_token_not_configured' });
+  if (!authConfigValidation.ok) {
+    fastify.log.warn({ event: 'evt.gateway.auth.not_configured', path: request.url, reason: authConfigValidation.reason });
+    reply.code(503).send({ error: authFailureReason(authConfigValidation.reason) });
     return false;
   }
   const candidate = resolveToken(request);
-  if (!secureEqual(candidate, gatewayApiToken)) {
+  const validation = validateGatewayToken(candidate, authConfig);
+  if (!validation.ok) {
     fastify.log.warn({ event: 'evt.gateway.auth.denied', path: request.url });
-    reply.code(401).send({ error: 'unauthorized' });
+    const reason = validation.reason || 'gateway_auth_unauthorized';
+    if (reason === 'missing_token') {
+      reply.code(401).send({ error: 'unauthorized' });
+    } else {
+      reply.code(401).send({ error: authFailureReason(reason) });
+    }
     return false;
   }
   return true;
